@@ -48,62 +48,20 @@ def log(msg, t="info"):
 
 def get_prices():
     try:
-        r = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price"
-            "?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10
-        )
-        if r.ok:
-            d = r.json()
-            prices = {}
-            for a in ASSETS:
-                prices[a["label"]] = {
-                    "price":  d[a["cg"]]["usd"],
-                    "chg24h": round(d[a["cg"]].get("usd_24h_change", 0), 2),
-                }
+        symbols = {"BTC": "BTC-USD", "ETH": "ETH-USD", "SOL": "SOL-USD"}
+        prices = {}
+        for label, pair in symbols.items():
+            r = requests.get(f"https://api.coinbase.com/v2/prices/{pair}/spot", timeout=10)
+            if r.ok:
+                prices[label] = {"price": float(r.json()["data"]["amount"]), "chg24h": 0}
+        if len(prices) == 3:
             S["prices"] = prices
             S["status"] = "live"
             S["cycles"] += 1
+            log(f"Prices loaded: BTC ${prices['BTC']['price']:,.0f}", "info")
             return prices
     except Exception as e:
         log(f"Price feed error: {e}", "error")
-
-    try:
-        log("Falling back to Coinbase price feed", "info")
-        prices = {}
-        for a in ASSETS:
-            cb_pair = a["label"][:3] + "-USD"
-            spot = requests.get(
-                f"https://api.coinbase.com/v2/prices/{cb_pair}/spot",
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10
-            )
-            yday = requests.get(
-                f"https://api.coinbase.com/v2/prices/{cb_pair}/spot?date="
-                f"{datetime.utcnow().date().isoformat()}",
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10
-            )
-            if not spot.ok:
-                raise RuntimeError(f"Coinbase {cb_pair} failed")
-            price = float(spot.json()["data"]["amount"])
-            chg = 0.0
-            if yday.ok:
-                try:
-                    y = float(yday.json()["data"]["amount"])
-                    if y:
-                        chg = round((price - y) / y * 100, 2)
-                except Exception:
-                    pass
-            prices[a["label"]] = {"price": price, "chg24h": chg}
-        S["prices"] = prices
-        S["status"] = "live"
-        S["cycles"] += 1
-        return prices
-    except Exception as e:
-        log(f"Coinbase fallback error: {e}", "error")
-
     S["status"] = "error"
     return None
 
