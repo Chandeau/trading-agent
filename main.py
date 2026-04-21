@@ -48,20 +48,25 @@ def log(msg, t="info"):
 
 def get_prices():
     try:
-        symbols = {"BTC": "BTC-USD", "ETH": "ETH-USD", "SOL": "SOL-USD"}
-        prices = {}
-        for label, pair in symbols.items():
-            r = requests.get(f"https://api.coinbase.com/v2/prices/{pair}/spot", timeout=10)
-            if r.ok:
-                prices[label] = {"price": float(r.json()["data"]["amount"]), "chg24h": 0}
-        if len(prices) == 3:
-            S["prices"] = prices
-            S["status"] = "live"
-            S["cycles"] += 1
-            log(f"Prices loaded: BTC ${prices['BTC']['price']:,.0f}", "info")
-            return prices
+        url = "https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes?symbols=BTC%2FUSD,ETH%2FUSD,SOL%2FUSD"
+        r = requests.get(url, headers=HEADS, timeout=10)
+        if r.ok:
+            d = r.json().get("quotes", {})
+            mapping = {"BTC/USD": "BTC", "ETH/USD": "ETH", "SOL/USD": "SOL"}
+            prices = {}
+            for sym, label in mapping.items():
+                if sym in d:
+                    ask = float(d[sym].get("ap", 0))
+                    bid = float(d[sym].get("bp", 0))
+                    prices[label] = {"price": (ask + bid) / 2, "chg24h": 0}
+            if len(prices) == 3:
+                S["prices"] = prices
+                S["status"] = "live"
+                S["cycles"] += 1
+                log(f"Prices: BTC ${prices['BTC']['price']:,.0f} ETH ${prices['ETH']['price']:,.0f}", "info")
+                return prices
     except Exception as e:
-        log(f"Price feed error: {e}", "error")
+        log(f"Price error: {e}", "error")
     S["status"] = "error"
     return None
 
